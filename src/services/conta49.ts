@@ -1,15 +1,106 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { logger } from "../utils/logger";
-import { Tax } from "../types";
+import { z } from "zod";
 
-// Create axios instance for Conta 49 API
-const conta49Api = axios.create({
-  baseURL: process.env.CONTA49_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
+const FirebaseAuthResponseSchema = z.object({
+  idToken: z.string(),
+  email: z.string(),
+  refreshToken: z.string(),
+  expiresIn: z.string(),
+  localId: z.string(),
+  registered: z.boolean(),
 });
+
+type FirebaseAuthResponse = z.infer<typeof FirebaseAuthResponseSchema>;
+
+const Conta49SignResponseSchema = z.object({
+  data: z.any(),
+  status: z.number(),
+  headers: z.object({
+    "set-cookie": z
+      .array(z.string())
+      .nonempty({ message: "No cookies returned from Conta49 sign-in" })
+      .refine(
+        (cookies) => cookies.some((cookie) => cookie.startsWith("session=")),
+        { message: "Session cookie not found in Conta49 response" },
+      ),
+  }),
+});
+
+type Conta49SignResponse = z.infer<typeof Conta49SignResponseSchema>;
+
+const PENDING = "PENDING";
+const OVERDUE = "OVERDUE";
+const RECEIVED = "RECEIVED";
+
+const ChargeSchema = z.object({
+  id: z.string(),
+  status: z.enum([PENDING, OVERDUE, RECEIVED]),
+  description: z.string(),
+  value: z.number(),
+  invoiceUrl: z.string(),
+});
+
+type Charge = z.infer<typeof ChargeSchema>;
+
+type ChargeWithPix = Charge & {
+  pixCode?: string;
+};
+
+const AccountChargesResponseSchema = z.array(
+  z.object(
+    {
+      result: z.object({
+        data: z.object(
+          {
+            json: z.unknown(),
+          },
+          { message: "data object invalid" },
+        ),
+      }),
+    },
+    { message: "result object invalid" },
+  ),
+);
+
+type AccountChargesResponse = z.infer<typeof AccountChargesResponseSchema>;
+
+const Conta49TaxDocumentSchema = z.object({
+  created_at: z.string().datetime(),
+  description: z.string(),
+  id: z.string(),
+  name: z.string(),
+  tags: z.array(z.string()),
+  title: z.string(),
+});
+
+type Conta49TaxDocument = z.infer<typeof Conta49TaxDocumentSchema>;
+
+const Conta49GetTaxDocumentsResponseSchema = z.array(
+  z.object(
+    {
+      result: z.object(
+        {
+          data: z.object(
+            {
+              json: z.unknown(),
+            },
+            { message: "data object invalid" },
+          ),
+        },
+        { message: "result object invalid" },
+      ),
+    },
+    { message: "parent object invalid" },
+  ),
+);
+
+type Conta49GetTaxDocumentsResponse = z.infer<
+  typeof Conta49GetTaxDocumentsResponseSchema
+>;
+
+const HtmlResponseSchema = z.string();
 
 /**
  * Firebase authentication for Conta49
@@ -21,14 +112,13 @@ const conta49Api = axios.create({
  * Security is enforced through Firebase Console settings (domain restrictions,
  * IP allowlists, and Firebase Security Rules).
  */
-async function firebaseAuthenticate(): Promise<any> {
+async function firebaseAuthenticate(): Promise<FirebaseAuthResponse> {
   try {
     // Log authentication attempt (without sensitive data)
     logger.info(
       `Attempting Firebase authentication for ${process.env.CONTA49_EMAIL}`,
     );
 
-    // Check if credentials are available
     if (!process.env.CONTA49_EMAIL) {
       throw new Error("CONTA49_EMAIL environment variable is not set");
     }
@@ -43,7 +133,7 @@ async function firebaseAuthenticate(): Promise<any> {
       );
     }
 
-    const response = await axios.post(
+    const response = await axios.post<FirebaseAuthResponse>(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.CONTA49_FIREBASE_API_KEY}`,
       {
         returnSecureToken: true,
@@ -57,12 +147,10 @@ async function firebaseAuthenticate(): Promise<any> {
       },
     );
 
-    logger.info("Firebase authentication successful");
-    return response.data;
+    return FirebaseAuthResponseSchema.parse(response.data);
   } catch (error) {
     logger.error("Failed to authenticate with Firebase", error);
 
-    // Add more detailed error information
     if (axios.isAxiosError(error) && error.response) {
       logger.error(
         `Firebase auth error details: ${JSON.stringify(error.response.data)}`,
@@ -77,9 +165,11 @@ async function firebaseAuthenticate(): Promise<any> {
  * Authenticates with Conta49 using Firebase token
  * @returns Authentication result
  */
-async function conta49SignIn(firebaseToken: string): Promise<any> {
+async function conta49SignIn(
+  firebaseToken: string,
+): Promise<{ sessionCookie: string }> {
   try {
-    const response = await axios.post(
+    const response = await axios.post<Conta49SignResponse>(
       "https://app.conta49.com.br/api/trpc/auth.signIn?batch=1",
       {
         "0": {
@@ -95,32 +185,20 @@ async function conta49SignIn(firebaseToken: string): Promise<any> {
       },
     );
 
-    // Extract the Set-Cookie header from the response
-    const cookies = response.headers["set-cookie"];
-    if (!cookies || cookies.length === 0) {
-      logger.error("No cookies returned from Conta49 sign-in");
-      throw new Error("No session cookie received from Conta49");
-    }
+    const validatedResponse = Conta49SignResponseSchema.parse(response);
 
-    // Find the session cookie
-    const sessionCookie = cookies.find((cookie: string) =>
-      cookie.startsWith("session="),
+    const sessionCookie = validatedResponse.headers["set-cookie"].find(
+      (cookie) => cookie.startsWith("session="),
+    )!;
+
+    const sessionValue = (sessionCookie.split(";")[0] ?? "").replace(
+      "session=",
+      "",
     );
-    if (!sessionCookie) {
-      logger.error("No session cookie found in Conta49 response");
-      throw new Error("Session cookie not found in Conta49 response");
-    }
-
-    // Extract just the cookie value (without attributes like Path, HttpOnly, etc.)
-    const sessionValue = sessionCookie.split(";")[0].replace("session=", "");
 
     logger.info("Conta49 sign-in successful with session cookie");
 
-    // Return both the response data and the session cookie
-    return {
-      data: response.data,
-      sessionCookie: sessionValue,
-    };
+    return { sessionCookie: sessionValue };
   } catch (error) {
     logger.error("Failed to sign in to Conta49", error);
     if (axios.isAxiosError(error) && error.response) {
@@ -132,22 +210,26 @@ async function conta49SignIn(firebaseToken: string): Promise<any> {
   }
 }
 
+interface AuthenticateConta49Response {
+  firebaseAuth: FirebaseAuthResponse;
+  sessionCookie: string;
+}
+
 /**
  * Complete authentication flow for Conta49
  * @returns Authentication tokens and session data
  */
-export async function authenticateConta49(): Promise<any> {
+export async function authenticateConta49(): Promise<AuthenticateConta49Response> {
   try {
-    // First authenticate with Firebase
-    const firebaseAuthResult = await firebaseAuthenticate();
+    const firebaseAuthResponse = await firebaseAuthenticate();
 
-    // Then use the Firebase token to authenticate with Conta49
-    const conta49AuthResult = await conta49SignIn(firebaseAuthResult.idToken);
+    const conta49AuthResponse = await conta49SignIn(
+      firebaseAuthResponse.idToken,
+    );
 
     return {
-      firebaseAuth: firebaseAuthResult,
-      conta49Auth: conta49AuthResult.data,
-      sessionCookie: conta49AuthResult.sessionCookie,
+      firebaseAuth: firebaseAuthResponse,
+      sessionCookie: conta49AuthResponse.sessionCookie,
     };
   } catch (error) {
     logger.error("Complete Conta49 authentication flow failed", error);
@@ -164,7 +246,7 @@ export async function authenticateConta49(): Promise<any> {
 export async function fetchAccountCharges(
   sessionCookie: string,
   accountId: string,
-): Promise<any> {
+): Promise<Array<Charge>> {
   try {
     const url =
       "https://app.conta49.com.br/api/trpc/account.getMe,account.getCharges?batch=1";
@@ -182,11 +264,10 @@ export async function fetchAccountCharges(
       },
     };
 
-    // URL encode the input data
     const inputParam = encodeURIComponent(JSON.stringify(inputData));
     const requestUrl = `${url}&input=${inputParam}`;
 
-    const response = await axios.get(requestUrl, {
+    const response = await axios.get<AccountChargesResponse>(requestUrl, {
       headers: {
         "Content-Type": "application/json",
         Cookie: `session=${sessionCookie}`,
@@ -194,7 +275,15 @@ export async function fetchAccountCharges(
     });
 
     logger.info("Successfully fetched account charges from Conta49");
-    return response.data;
+    const validateResponse = AccountChargesResponseSchema.parse(response.data);
+
+    const payments = validateResponse[1]?.result?.data?.json;
+
+    const validatedPayments = z
+      .array(ChargeSchema, { message: "Failed parsing array of ChargeSchema" })
+      .parse(payments);
+
+    return validatedPayments;
   } catch (error) {
     logger.error("Failed to fetch account charges from Conta49", error);
     throw new Error("Failed to fetch account charges");
@@ -202,87 +291,62 @@ export async function fetchAccountCharges(
 }
 
 function parseInvoiceUrl(invoiceUrl: string): string {
-  // Check if it's already in the correct format
   if (invoiceUrl.includes("/b/preview/")) {
     return invoiceUrl;
   }
 
-  // Extract the ID from the invoice URL (the part after "/i/")
-  const matches = invoiceUrl.match(/\/i\/([^\/]+)$/);
-  if (matches && matches[1]) {
+  const matches = /\/i\/([^\/]+)$/.exec(invoiceUrl);
+  if (matches?.[1]) {
     const id = matches[1];
     return `https://www.asaas.com/b/preview/${id}`;
   }
 
-  // If no match found, return original URL
   return invoiceUrl;
 }
 
 /**
- * Converts a payment from Conta49 API to our Tax interface
- * @param payment Payment object from Conta49 API
- * @returns Tax object
- */
-function paymentToTax(payment: any): Tax {
-  return {
-    id: payment.id,
-    description: payment.description,
-    dueDate: new Date(payment.dueDate),
-    amount: payment.value,
-    barCode: payment.nossoNumero,
-    documentType: payment.billingType,
-    paymentUrl: parseInvoiceUrl(payment.invoiceUrl),
-  };
-}
-
-/**
- * Extracts PIX code from a payment URL
+ * Extracts PIX code from a payment URL from asa preview page
  * @param paymentUrl The URL to the payment page
  * @returns The PIX code or null if not found
  */
-export async function extractPixCodeFromUrl(
+export async function extractPixCodeFromAsaPreviewPage(
   paymentUrl: string,
 ): Promise<string | null> {
   try {
     logger.info(`Extracting PIX code from URL: ${paymentUrl}`);
 
-    // Fetch the payment page
     const response = await axios.get(paymentUrl);
-    const html = response.data;
+    const html = HtmlResponseSchema.parse(response.data);
 
-    // Use cheerio to parse the HTML
     const $ = cheerio.load(html);
 
-    // Look for the PIX code in the pix-section div
     const pixSection = $(".pix-section");
     if (pixSection.length > 0) {
-      // Get the paragraph that contains the PIX code
-      const pixCode = pixSection.find("p").text().trim();
-      if (pixCode && pixCode.startsWith("00020101")) {
+      const pixCode = pixSection.find("p")?.text()?.trim() || "";
+      if (pixCode?.startsWith("00020101")) {
         logger.info("Successfully extracted PIX code from pix-section");
-        return pixCode.replace(/\s+/g, ""); // Remove any whitespace
+        return pixCode;
       }
     }
 
     // Alternative: Look for elements with "Código Pix copia e cola" heading
     const pixHeading = $('h5:contains("Código Pix copia e cola")');
     if (pixHeading.length > 0) {
-      // Get the next paragraph after the heading
-      const pixCode = pixHeading.next("p").text().trim();
-      if (pixCode && pixCode.startsWith("00020101")) {
+      const pixCode = pixHeading.next("p")?.text()?.trim() || "";
+      if (pixCode?.startsWith("00020101")) {
         logger.info("Successfully extracted PIX code from heading");
-        return pixCode.replace(/\s+/g, ""); // Remove any whitespace
+        return pixCode;
       }
     }
 
     // Fallback: Look for any paragraph containing a PIX code pattern
     const pixParagraphs = $("p").filter(function () {
-      const text = $(this).text().trim();
+      const text = $(this).text()?.trim() || "";
       return text.includes("br.gov.bcb.pix") && text.startsWith("00020101");
     });
 
     if (pixParagraphs.length > 0) {
-      const pixCode = pixParagraphs.first().text().trim();
+      const pixCode = pixParagraphs.first().text()?.trim() || "";
       logger.info("Successfully extracted PIX code from paragraph");
       return pixCode;
     }
@@ -290,81 +354,86 @@ export async function extractPixCodeFromUrl(
     logger.warn("Could not extract PIX code from the payment page");
     return null;
   } catch (error) {
-    logger.error("Error extracting PIX code from URL", { error });
+    // Properly type the error
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    logger.error("Error extracting PIX code from URL", { error: errorMessage });
     return null;
   }
 }
 
 /**
  * Enhances tax objects by fetching and adding payment codes
- * @param taxes Array of tax objects
- * @returns Enhanced tax objects with payment codes where available
+ * @param charges Array of charge objects
+ * @returns Enhanced charge objects with payment codes where available
  */
-export async function enhanceTaxesWithPaymentCodes(
-  taxes: Tax[],
-): Promise<Tax[]> {
-  const enhancedTaxes: Tax[] = [];
+export async function enhanceChargesWithPaymentCodes(
+  charges: Charge[],
+): Promise<ChargeWithPix[]> {
+  const enhancedCharges: ChargeWithPix[] = [];
 
-  for (const tax of taxes) {
+  for (const charge of charges) {
     try {
-      // If there's a payment URL, try to extract the PIX code
-      if (tax.paymentUrl) {
-        const pixCode = await extractPixCodeFromUrl(tax.paymentUrl);
-        if (pixCode) {
-          tax.pixCode = pixCode;
-        }
+      const enhancedCharge: ChargeWithPix = {
+        ...charge,
+      };
+      const pixCode = await extractPixCodeFromAsaPreviewPage(charge.invoiceUrl);
+
+      if (pixCode) {
+        enhancedCharge.pixCode = pixCode;
       }
 
-      enhancedTaxes.push(tax);
+      enhancedCharges.push(enhancedCharge);
     } catch (error) {
-      logger.error(`Error enhancing tax with ID ${tax.id}`, { error });
-      enhancedTaxes.push(tax); // Still include the original tax
+      logger.error(`Error enhancing charge with ID ${charge.id}`, { error });
+      enhancedCharges.push({ ...charge });
     }
   }
 
-  return enhancedTaxes;
+  return enhancedCharges;
 }
 
 /**
- * Gets all pending taxes from Conta49
- * @returns List of taxes that need to be paid
+ * Gets all pending charges from Conta49
+ * @returns List of charges that need to be paid
  */
-export async function getPendingTaxes(): Promise<Tax[]> {
+export async function getPendingCharges(): Promise<ChargeWithPix[]> {
   try {
-    // First authenticate
-    const authResult = await authenticateConta49();
+    const authResponse = await authenticateConta49();
 
-    // Extract session cookie from auth result
-    const sessionCookie = authResult.sessionCookie;
+    const sessionCookie = authResponse.sessionCookie;
 
-    // Get account ID from auth result or use from environment
-    const accountId =
-      process.env.CONTA49_ACCOUNT_ID || "65d62836a290003c6c9e768f";
+    if (!process.env.CONTA49_ACCOUNT_ID) {
+      throw new Error("CONTA49_ACCOUNT_ID environment variable is not set");
+    }
 
-    // Fetch charges
-    const chargesResult = await fetchAccountCharges(sessionCookie, accountId);
-
-    // Extract payments from the response
-    // The charges are in the second result object, in the data.json array
-    const payments = chargesResult[1]?.result?.data?.json || [];
-
-    // Filter for pending or overdue payments only
-    const pendingPayments = payments.filter(
-      (payment: any) =>
-        payment.status === "PENDING" || payment.status === "OVERDUE",
+    const charges = await fetchAccountCharges(
+      sessionCookie,
+      process.env.CONTA49_ACCOUNT_ID,
     );
 
-    // Convert to Tax objects
-    let taxes: Tax[] = pendingPayments.map(paymentToTax);
+    const pendingCharges = charges
+      .filter(
+        (payment: Charge) =>
+          payment.status === PENDING || payment.status === OVERDUE,
+      )
+      .map((charge) => {
+        return {
+          ...charge,
+          invoiceUrl: parseInvoiceUrl(charge.invoiceUrl),
+        };
+      });
 
-    // Enhance taxes with payment codes
-    taxes = await enhanceTaxesWithPaymentCodes(taxes);
+    logger.info(
+      `Found ${pendingCharges.length} pending charges and ${charges.length - pendingCharges.length} paid charges`,
+    );
 
-    logger.info(`Found ${taxes.length} pending taxes`);
-    return taxes;
+    const pendingChargesWithPix = await enhanceChargesWithPaymentCodes(pendingCharges);
+
+    return pendingChargesWithPix;
   } catch (error) {
-    logger.error("Failed to get pending taxes", error);
-    throw new Error("Failed to get pending taxes from Conta49");
+    logger.error("Failed to get pending charges", error);
+    throw new Error("Failed to get pending charges from Conta49");
   }
 }
 
@@ -372,13 +441,11 @@ export async function getPendingTaxes(): Promise<Tax[]> {
  * Fetches documents from Conta49 and filters for tax documents
  * @returns List of tax documents (guias and boletos)
  */
-export async function getTaxDocuments(): Promise<any[]> {
+export async function getTaxDocuments(): Promise<Conta49TaxDocument[]> {
   try {
-    // First authenticate
-    const authResult = await authenticateConta49();
+    const authResponse = await authenticateConta49();
 
-    // Extract session cookie from auth result
-    const sessionCookie = authResult.sessionCookie;
+    const sessionCookie = authResponse.sessionCookie;
 
     if (!sessionCookie) {
       logger.error("No session cookie found in authentication response");
@@ -387,11 +454,8 @@ export async function getTaxDocuments(): Promise<any[]> {
 
     logger.info("Successfully obtained Conta49 session cookie");
 
-    // Get account ID from auth result or use from environment
-    const accountId =
-      process.env.CONTA49_ACCOUNT_ID || "65d62836a290003c6c9e768f";
+    const accountId = process.env.CONTA49_ACCOUNT_ID;
 
-    // Prepare the request to fetch documents
     const url =
       "https://app.conta49.com.br/api/trpc/account.getMe,account.getDocuments,account.getDocumentTags";
 
@@ -414,58 +478,40 @@ export async function getTaxDocuments(): Promise<any[]> {
       },
     };
 
-    // URL encode the input data
     const inputParam = encodeURIComponent(JSON.stringify(inputData));
     const requestUrl = `${url}?batch=1&input=${inputParam}`;
 
-    const response = await axios.get(requestUrl, {
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `session=${sessionCookie}`,
+    const response = await axios.get<Conta49GetTaxDocumentsResponse>(
+      requestUrl,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `session=${sessionCookie}`,
+        },
       },
-    });
+    );
 
-    // Extract documents from the response
-    // The documents are in the second result object, in the data.json array
-    const documents = response.data[1]?.result?.data?.json || [];
+    const validatedResponse = Conta49GetTaxDocumentsResponseSchema.parse(
+      response.data,
+    );
 
-    // Filter for documents with "guia" or "Boleto" tags
-    const taxDocuments = documents.filter((doc: any) => {
-      if (!doc.tags || !Array.isArray(doc.tags)) return false;
-      return doc.tags.includes("guia") || doc.tags.includes("Boleto");
-    });
+    const documents = validatedResponse[1]?.result?.data?.json;
 
-    // Extract relevant information and parse dates
-    const formattedDocuments = taxDocuments.map((doc: any) => {
-      // Try to extract due date from description if it contains "Vencimento"
-      let dueDate = null;
-      if (doc.description && doc.description.includes("Vencimento")) {
-        const dateMatch = doc.description.match(
-          /Vencimento\s+(\d{2}\/\d{2}\/\d{4})/,
-        );
-        if (dateMatch && dateMatch[1]) {
-          const [day, month, year] = dateMatch[1].split("/").map(Number);
-          dueDate = new Date(year, month - 1, day);
-        }
-      }
+    const validatedDocuments = z
+      .array(Conta49TaxDocumentSchema)
+      .parse(documents);
 
-      return {
-        id: doc.id,
-        uuid: doc.uuid,
-        title: doc.title,
-        description: doc.description,
-        tags: doc.tags,
-        createdAt: new Date(doc.created_at),
-        dueDate: dueDate,
-        fileName: doc.name,
-        documentType: doc.tags.includes("Boleto") ? "Boleto" : "Guia",
-      };
-    });
+    const taxDocuments = validatedDocuments.filter(
+      (doc: Conta49TaxDocument) => {
+        if (!doc.tags || !Array.isArray(doc.tags)) return false;
+        return doc.tags.includes("guia") || doc.tags.includes("Boleto");
+      },
+    );
 
     logger.info(
-      `Found ${formattedDocuments.length} tax documents (guias and boletos)`,
+      `Found ${taxDocuments.length} tax documents (guias and boletos)`,
     );
-    return formattedDocuments;
+    return taxDocuments;
   } catch (error) {
     logger.error("Failed to get tax documents", error);
 
@@ -482,4 +528,3 @@ export async function getTaxDocuments(): Promise<any[]> {
     throw new Error("Failed to get tax documents from Conta49");
   }
 }
-

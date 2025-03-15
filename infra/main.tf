@@ -24,7 +24,7 @@ resource "vercel_project" "tax_payment_automator" {
   
   git_repository = {
     type = "github"
-    repo = "gustavo-nakabayashi/payment-automator"
+    repo = "gustavo-nakabayashi/finance-assistant"
   }
 
   environment = [
@@ -59,22 +59,12 @@ resource "vercel_project" "tax_payment_automator" {
       target = ["production", "preview", "development"]
     },
     {
-      key    = "POLLING_INTERVAL"
-      value  = "60"
-      target = ["production", "preview", "development"]
-    },
-    {
       key    = "NODE_ENV"
       value  = "production"
       target = ["production"]
     },
     {
       key    = "POSTGRES_URL"
-      value  = ""  # Will be set via Vercel UI when connecting the database
-      target = ["production", "preview", "development"]
-    },
-    {
-      key    = "POSTGRES_PRISMA_URL"
       value  = ""  # Will be set via Vercel UI when connecting the database
       target = ["production", "preview", "development"]
     },

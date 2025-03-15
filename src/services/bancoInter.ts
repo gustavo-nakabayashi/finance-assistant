@@ -1,9 +1,7 @@
 import axios from "axios";
 import fs from "fs";
-import path from "path";
 import https from "https";
 import { logger } from "../utils/logger";
-import { Tax } from "../types";
 
 // Base URL for Banco Inter API
 const BANCO_INTER_BASE_URL = "https://cdpj.partners.bancointer.com.br";

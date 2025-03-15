@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
-    "fetch:taxes": "tsx src/scripts/fetchPendingTaxes.ts",
+    "fetch:charges": "tsx src/scripts/fetchPendingCharges.ts",
     "fetch:documents": "tsx src/scripts/fetchTaxDocuments.ts",
     "fetch": "npm run fetch:taxes && npm run fetch:documents",
     "start:automator": "tsx src/scripts/startPaymentAutomator.ts"

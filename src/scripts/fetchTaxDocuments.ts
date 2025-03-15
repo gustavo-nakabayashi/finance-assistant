@@ -2,14 +2,12 @@ import dotenv from "dotenv";
 import { getTaxDocuments } from "../services/conta49";
 import { logger } from "../utils/logger";
 
-// Load environment variables
 dotenv.config();
 
 async function main() {
   try {
     logger.info("Starting tax document fetch test");
 
-    // Fetch tax documents (guias and boletos)
     const taxDocuments = await getTaxDocuments();
 
     if (taxDocuments.length === 0) {
@@ -19,16 +17,14 @@ async function main() {
 
     logger.info(`Found ${taxDocuments.length} tax documents`);
 
-    // Display the documents
     taxDocuments.forEach((doc, index) => {
       logger.info(`Document ${index + 1}:`);
+      logger.info(`  ID: ${doc.id}`);
       logger.info(`  Title: ${doc.title}`);
-      logger.info(`  Type: ${doc.documentType}`);
-      logger.info(`  Created: ${doc.createdAt.toLocaleDateString()}`);
-      if (doc.dueDate) {
-        logger.info(`  Due Date: ${doc.dueDate.toLocaleDateString()}`);
-      }
+      logger.info(`  File name: ${doc.name}`);
+      logger.info(`  Description: ${doc.description}`);
       logger.info(`  Tags: ${doc.tags.join(", ")}`);
+      logger.info(`  Created At: ${doc.created_at}`);
       logger.info("-----------------------------------");
     });
 
@@ -38,7 +34,6 @@ async function main() {
   }
 }
 
-// Run the main function
 main().catch((error) => {
   logger.error("Unhandled error in main function", error);
   process.exit(1);
