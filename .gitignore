@@ -44,3 +44,6 @@ yarn-error.log*
 
 # idea files
 .idea
+infra/.terraform/providers/registry.terraform.io/vercel/vercel/0.4.0/darwin_arm64
+infra/.terraform.lock.hcl
+infra/terraform.tfvars
