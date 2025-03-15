@@ -24,9 +24,10 @@ export async function GET(request: Request) {
     });
 
     logger.info("Pending charges fetch test completed successfully");
+
+    return new Response("success");
   } catch (error) {
     logger.error("Error in pending charges fetch test", error);
+    return new Response("error");
   }
-
-  return new Response('success');
 }
