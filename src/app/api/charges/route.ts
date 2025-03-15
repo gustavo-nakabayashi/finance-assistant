@@ -28,5 +28,5 @@ export async function GET(request: Request) {
     logger.error("Error in pending charges fetch test", error);
   }
 
-  return
+  return new Response('success');
 }
