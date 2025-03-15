@@ -47,3 +47,5 @@ yarn-error.log*
 infra/.terraform/providers/registry.terraform.io/vercel/vercel/0.4.0/darwin_arm64
 infra/.terraform.lock.hcl
 infra/terraform.tfvars
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
