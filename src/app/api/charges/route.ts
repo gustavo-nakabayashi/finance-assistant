@@ -3,14 +3,14 @@ import { logger } from "~/utils/logger";
 
 export async function GET(request: Request) {
   try {
-    logger.info("Starting pending charges fetch test");
-
     const authHeader = request.headers.get("authorization");
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return new Response("Unauthorized", {
         status: 401,
       });
     }
+
+    logger.info("Starting pending charges fetch test");
 
     const pendingCharges = await getPendingCharges();
 
