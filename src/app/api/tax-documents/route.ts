@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     if (taxDocuments.length === 0) {
       logger.info("No tax documents found");
       return new Response(
-        JSON.stringify({ message: "No pending taxes found" }),
+        JSON.stringify({ message: "No taxes documents found" }),
         {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -32,11 +32,30 @@ export async function GET(request: Request) {
       return !dbDocuments.map((existingDoc) => existingDoc.id).includes(doc.id);
     });
 
-    await db.insert(documents).values(newDocuments);
+    if (newDocuments.length === 0) {
+      logger.info("No new tax documents found");
+      return new Response(
+        JSON.stringify({ message: "No pending taxes found" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    await db.insert(documents).values(
+      newDocuments.map((doc) => {
+        return {
+          id: doc.id,
+          created_at: new Date(doc.created_at),
+          name: doc.name,
+        };
+      }),
+    );
 
     logger.info(`Found ${taxDocuments.length} tax documents`);
 
-    taxDocuments.forEach((doc, index) => {
+    newDocuments.forEach((doc, index) => {
       logger.info(`Document ${index + 1}:`);
       logger.info(`  ID: ${doc.id}`);
       logger.info(`  Title: ${doc.title}`);
@@ -46,8 +65,6 @@ export async function GET(request: Request) {
       logger.info(`  Created At: ${doc.created_at}`);
       logger.info("-----------------------------------");
     });
-
-    logger.info("Tax document fetch test completed successfully");
 
     return new Response(
       JSON.stringify({
@@ -61,7 +78,7 @@ export async function GET(request: Request) {
       },
     );
   } catch (error) {
-    logger.error("Error in pending taxes fetch test", error);
+    logger.error("Error in pending taxes fetch", error);
     return new Response(
       JSON.stringify({ message: "error", error: String(error) }),
       {

@@ -29,10 +29,10 @@ export const documents = createTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 256 }).notNull(),
     paid: boolean("paid").default(false).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
+    created_at: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    updated_at: timestamp("updated_at", { withTimezone: true }).$onUpdate(
       () => new Date(),
     ),
   },

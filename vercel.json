@@ -3,6 +3,10 @@
     {
       "path": "/api/charges",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/tax-documents",
+      "schedule": "0 16 * * *"
     }
   ]
 }
