@@ -75,7 +75,9 @@ const Conta49TaxDocumentSchema = z.object({
   name: z.string(),
   tags: z.array(z.string()),
   title: z.string(),
-  payment_code: z.string().optional(),
+  payment_code: z.string().min(47).max(48).optional(),
+  expiration_date: z.string().optional(),
+  value: z.string().optional(),
 });
 
 type Conta49TaxDocument = z.infer<typeof Conta49TaxDocumentSchema>;
@@ -552,6 +554,14 @@ export async function getTaxDocuments(): Promise<Conta49TaxDocument[]> {
   }
 }
 
+const boletoSchema = z.object({
+  payment_code: z.string(),
+  value: z.string(),
+  expiration_date: z.string(),
+});
+
+type Boleto = z.infer<typeof boletoSchema>;
+
 /**
  * Fetches account information and charges from Conta49
  * @param sessionToken Firebase session token
@@ -561,7 +571,7 @@ export async function getTaxDocuments(): Promise<Conta49TaxDocument[]> {
  */
 export async function fetchConta49DocumentPaymentCode(
   documentId: string,
-): Promise<string> {
+): Promise<Boleto> {
   try {
     const authResponse = await authenticateConta49();
 
@@ -612,8 +622,6 @@ export async function fetchConta49DocumentPaymentCode(
     const paymentCodeResponse = await anthropic.messages.create({
       model: "claude-3-7-sonnet-20250219",
       max_tokens: 1024,
-      system:
-        "Você é especializado em extrair código de boletos pagos para serem pagos de forma automática",
       messages: [
         {
           role: "user",
@@ -627,7 +635,35 @@ export async function fetchConta49DocumentPaymentCode(
             },
             {
               type: "text",
-              text: "Extrair o código do boleto desse PDF, responda somente com o código sem barras de espaço, nada mais",
+              text: `
+              You are tasked with extracting specific information from a PDF document containing a Brazillian Boleto. Your goal is to extract the Pix payment code, the expiration date, and the payment value from the provided PDF content.
+
+              Follow these steps to complete the task:
+
+              1. Analyze the PDF content and locate the Code to pay, it's a brazillian Boleto for paying taxes.
+              2. Extract the Pix payment code from the QR code. This code is a numeric string, from 47 to 48 chars. I'' give you 3 real life examples:
+                1. 85890000005 0 68210385250 9 79071625072 1 16722993141 0
+                2. 85820000004 0 55720328250 2 51072025042 0 58369703702 3
+                3. 81670000001-0 75610521202-8 50331032515-7 53710070000-5
+              3. Remove any white spaces and dashes from the extracted Pix payment code.
+              4. Locate and extract the expiration date for the payment.
+              5. Find and extract the payment value.
+              6. Format the payment value as a string with 2 decimal places.
+
+              After extracting the required information, format your response as a JSON object with the following properties:
+              - payment_code: The Pix payment code as a string with no white spaces
+              - value: The payment value as a string with 2 decimal places
+              - expiration date: The payment value as a string with 2 decimal places
+
+              Answer just with JSON, no text, no markdown, no nothing, just a valid json. Output example:
+
+              {
+                "payment_code": "858900000050682103852509790716250721167229931410",
+                "value": "payment_value_with_2_decimals",
+                "expiration_date": "date iso format"
+              }
+
+              Note: If you cannot find or extract any of the required information, use an empty string ("") for the corresponding value in the JSON object.`,
             },
           ],
         },
@@ -636,12 +672,17 @@ export async function fetchConta49DocumentPaymentCode(
 
     const res = paymentCodeResponse.content[0];
 
-    if (res?.type !== "text"){
+    if (res?.type !== "text") {
       logger.error("Failed to fetch document URL from 49");
-      throw new Error ("failed to get text from claude response")
+      throw new Error("failed to get text from claude response");
     }
 
-    const paymentCode = z.string().parse(res.text);
+    logger.info(
+      `Attempting to parse payment details response as JSON: ${documentUrl}`,
+      res.text,
+    );
+
+    const paymentCode = boletoSchema.parse(JSON.parse(res.text));
 
     return paymentCode;
   } catch (error) {
