@@ -29,38 +29,49 @@ resource "vercel_project" "finance-assistant" {
   environment = [
     {
       key    = "CONTA49_EMAIL"
-      value  = ""
+      type = string
       target = ["production", "preview", "development"]
     },
     {
       key    = "CONTA49_PASSWORD"
-      value  = ""
+      type = string
+      sensitive = true
       target = ["production", "preview", "development"]
     },
     {
       key    = "CONTA49_FIREBASE_API_KEY"
-      value  = ""
+      type = string
+      sensitive = true
       target = ["production", "preview", "development"]
     },
     {
       key    = "CONTA49_ACCOUNT_ID"
-      value  = ""
+      type = string
+      sensitive = true
       target = ["production", "preview", "development"]
     },
     {
       key    = "BANCO_INTER_CLIENT_ID"
-      value  = ""
+      type = string
+      sensitive = true
       target = ["production", "preview", "development"]
     },
     {
       key    = "BANCO_INTER_CLIENT_SECRET"
-      value  = ""
+      type = string
+      sensitive = true
       target = ["production", "preview", "development"]
     },
     {
       key    = "NODE_ENV"
       value  = "production"
       target = ["production"]
+    },
+    {
+      key    = "CRON_SECRET"
+      type = string
+      sensitive = true
+      target = ["production", "preview", "development"]
     },
     # { Neon creates this automatically on vercel
     #   key    = "DATABASE_URL"
