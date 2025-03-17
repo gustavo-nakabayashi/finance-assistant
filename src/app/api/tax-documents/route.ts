@@ -1,6 +1,6 @@
 import { db } from "~/server/db";
 import { documents } from "~/server/db/schema";
-import { getTaxDocuments } from "~/services/conta49";
+import { fetchConta49DocumentPaymentCode, getTaxDocuments } from "~/services/conta49";
 import { logger } from "~/utils/logger";
 
 export async function GET(request: Request) {
@@ -43,12 +43,18 @@ export async function GET(request: Request) {
       );
     }
 
+    for (const doc of newDocuments) {
+      const docUrl = await fetchConta49DocumentPaymentCode(doc.id);
+      doc.payment_code = docUrl;
+    }
+
     await db.insert(documents).values(
       newDocuments.map((doc) => {
         return {
           id: doc.id,
           created_at: new Date(doc.created_at),
           name: doc.name,
+          payment_code: doc.payment_code ?? "",
         };
       }),
     );
@@ -63,6 +69,7 @@ export async function GET(request: Request) {
       logger.info(`  Description: ${doc.description}`);
       logger.info(`  Tags: ${doc.tags.join(", ")}`);
       logger.info(`  Created At: ${doc.created_at}`);
+      logger.info(`  Payment Code: ${doc.payment_code}`);
       logger.info("-----------------------------------");
     });
 

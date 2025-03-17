@@ -29,6 +29,7 @@ export const documents = createTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     name: varchar("name", { length: 256 }).notNull(),
     paid: boolean("paid").default(false).notNull(),
+    payment_code: varchar("payment_code", { length: 1024 }).notNull(),
     created_at: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),

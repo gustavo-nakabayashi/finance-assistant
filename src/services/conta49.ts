@@ -1,7 +1,9 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { logger } from "../utils/logger";
 import { z } from "zod";
+import Anthropic from "@anthropic-ai/sdk";
+
+import { logger } from "../utils/logger";
 
 const FirebaseAuthResponseSchema = z.object({
   idToken: z.string(),
@@ -73,6 +75,7 @@ const Conta49TaxDocumentSchema = z.object({
   name: z.string(),
   tags: z.array(z.string()),
   title: z.string(),
+  payment_code: z.string().optional(),
 });
 
 type Conta49TaxDocument = z.infer<typeof Conta49TaxDocumentSchema>;
@@ -101,6 +104,25 @@ type Conta49GetTaxDocumentsResponse = z.infer<
 >;
 
 const HtmlResponseSchema = z.string();
+
+const Conta49DocumentURLResponseSchema = z.array(
+  z.object(
+    {
+      result: z.object(
+        {
+          data: z.object(
+            {
+              json: z.string(),
+            },
+            { message: "data object invalid" },
+          ),
+        },
+        { message: "result object invalid" },
+      ),
+    },
+    { message: "parent object invalid" },
+  ),
+);
 
 /**
  * Firebase authentication for Conta49
@@ -428,7 +450,8 @@ export async function getPendingCharges(): Promise<ChargeWithPix[]> {
       `Found ${pendingCharges.length} pending charges and ${charges.length - pendingCharges.length} paid charges`,
     );
 
-    const pendingChargesWithPix = await enhanceChargesWithPaymentCodes(pendingCharges);
+    const pendingChargesWithPix =
+      await enhanceChargesWithPaymentCodes(pendingCharges);
 
     return pendingChargesWithPix;
   } catch (error) {
@@ -526,5 +549,103 @@ export async function getTaxDocuments(): Promise<Conta49TaxDocument[]> {
     }
 
     throw new Error("Failed to get tax documents from Conta49");
+  }
+}
+
+/**
+ * Fetches account information and charges from Conta49
+ * @param sessionToken Firebase session token
+ * @param accountId Account ID to fetch charges for
+ * @param documentId Account ID to fetch charges for
+ * @returns document URL
+ */
+export async function fetchConta49DocumentPaymentCode(
+  documentId: string,
+): Promise<string> {
+  try {
+    const authResponse = await authenticateConta49();
+
+    const sessionCookie = authResponse.sessionCookie;
+
+    if (!sessionCookie) {
+      logger.error("No session cookie found in authentication response");
+      throw new Error("Missing session cookie");
+    }
+
+    logger.info("Successfully obtained Conta49 session cookie");
+
+    const accountId = process.env.CONTA49_ACCOUNT_ID;
+
+    const response = await axios.post(
+      "https://app.conta49.com.br/api/trpc/account.getDocumentDownloadUrl?batch=1",
+      {
+        "0": {
+          json: {
+            accountId,
+            documentId,
+          },
+        },
+      },
+      {
+        headers: {
+          "content-type": "application/json",
+          Cookie: `session=${sessionCookie}`,
+        },
+      },
+    );
+
+    logger.info("Successfully fetched conta 49 document URL");
+
+    const validateResponse = Conta49DocumentURLResponseSchema.parse(
+      response.data,
+    );
+
+    const documentUrl = z
+      .string()
+      .url()
+      .parse(validateResponse[0]?.result?.data?.json);
+
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+
+    const paymentCodeResponse = await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
+      max_tokens: 1024,
+      system:
+        "Você é especializado em extrair código de boletos pagos para serem pagos de forma automática",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: {
+                type: "url",
+                url: documentUrl,
+              },
+            },
+            {
+              type: "text",
+              text: "Extrair o código do boleto desse PDF, responda somente com o código sem barras de espaço, nada mais",
+            },
+          ],
+        },
+      ],
+    });
+
+    const res = paymentCodeResponse.content[0];
+
+    if (res?.type !== "text"){
+      logger.error("Failed to fetch document URL from 49");
+      throw new Error ("failed to get text from claude response")
+    }
+
+    const paymentCode = z.string().parse(res.text);
+
+    return paymentCode;
+  } catch (error) {
+    logger.error("Failed to fetch document URL from 49", error);
+    throw new Error("Failed to fetch document URL");
   }
 }
