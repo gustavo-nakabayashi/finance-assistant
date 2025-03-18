@@ -687,10 +687,17 @@ export async function fetchConta49DocumentPaymentCode(
                       throw new Error("failed to get text from claude response");
                     }
 
-  `})
-                    logger.info( `Attempting to parse payment details response as JSON: ${documentUrl}`,
-      res.text,
-    );
+  `
+              },
+            ],
+          },
+        ],
+      });
+
+      logger.info(
+        `Attempting to parse payment details response as JSON: ${documentUrl}`,
+        res.text,
+      );
 
     const paymentCode = boletoSchema.parse(JSON.parse(res.text));
 
