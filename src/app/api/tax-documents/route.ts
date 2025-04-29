@@ -89,7 +89,7 @@ export async function GET(request: Request) {
   } catch (error) {
     logger.error("Error in pending taxes fetch", error);
     return new Response(
-      JSON.stringify({ message: "error", error: String(error) }),
+      JSON.stringify({ message: "An unexpected error occurred" }),
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
