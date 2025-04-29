@@ -1,5 +1,5 @@
 import { db } from "~/server/db";
-import { documents } from "~/server/db/schema";
+import { documentsTable } from "~/server/db/schema";
 import {
   fetchConta49DocumentPaymentCode,
   getTaxDocuments,
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     logger.info("Starting tax document fetch test");
 
     const taxDocuments = await getTaxDocuments();
-    const dbDocuments = await db.query.documents.findMany();
+    const dbDocuments = await db.query.documentsTable.findMany();
 
     if (taxDocuments.length === 0) {
       logger.info("No tax documents found");
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
       doc.payment_code = docUrl.payment_code;
       doc.value = docUrl.value;
       doc.expiration_date = docUrl.expiration_date;
-      await db.insert(documents).values({
+      await db.insert(documentsTable).values({
         id: doc.id,
         created_at: new Date(doc.created_at),
         name: doc.name,
