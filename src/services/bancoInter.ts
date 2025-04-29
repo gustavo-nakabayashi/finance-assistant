@@ -1,9 +1,7 @@
 import axios from "axios";
-import fs from "fs";
 import https from "https";
 import { logger } from "../utils/logger";
-import { db } from "~/server/db";
-import { type documents } from "~/server/db/schema";
+import { type documentsTable } from "~/server/db/schema";
 
 const BANCO_INTER_BASE_URL = "https://cdpj.partners.bancointer.com.br";
 const TOKEN_ENDPOINT = "/oauth/v2/token";
@@ -277,7 +275,7 @@ export function createPixBankAccountPayment(
   };
 }
 
-type Boleto = typeof documents.$inferInsert;
+type Boleto = typeof documentsTable.$inferInsert;
 
 export async function createBoletoBankAccountPayment(
   boleto: Boleto,

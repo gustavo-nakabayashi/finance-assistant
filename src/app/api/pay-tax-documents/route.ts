@@ -1,7 +1,7 @@
 import { db } from "~/server/db";
 import { logger } from "~/utils/logger";
 import { ne, eq, and } from "drizzle-orm";
-import { documents } from "../../../server/db/schema";
+import { documentsTable } from "../../../server/db/schema";
 import {
   createBoletoBankAccountPayment,
   generateBancoInterToken,
@@ -9,8 +9,8 @@ import {
 
 export async function GET(request: Request) {
   try {
-    const boletos = await db.query.documents.findMany({
-      where: and(eq(documents.paid, false), ne(documents.payment_code, "")),
+    const boletos = await db.query.documentsTable.findMany({
+      where: and(eq(documentsTable.paid, false), ne(documentsTable.payment_code, "")),
     });
 
     const token = await generateBancoInterToken();

@@ -4,6 +4,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 
 import { logger } from "../utils/logger";
+import { db } from "~/server/db";
 
 const FirebaseAuthResponseSchema = z.object({
   idToken: z.string(),
@@ -32,9 +33,9 @@ const Conta49SignResponseSchema = z.object({
 
 type Conta49SignResponse = z.infer<typeof Conta49SignResponseSchema>;
 
-const PENDING = "PENDING";
-const OVERDUE = "OVERDUE";
-const RECEIVED = "RECEIVED";
+export const PENDING = "PENDING";
+export const OVERDUE = "OVERDUE";
+export const RECEIVED = "RECEIVED";
 
 const ChargeSchema = z.object({
   id: z.string(),
@@ -436,6 +437,8 @@ export async function getPendingCharges(): Promise<ChargeWithPix[]> {
       process.env.CONTA49_ACCOUNT_ID,
     );
 
+    const paymentEvents = await db.query.paymentEventsTable.findMany();
+
     const pendingCharges = charges
       .filter(
         (payment: Charge) =>
@@ -446,7 +449,10 @@ export async function getPendingCharges(): Promise<ChargeWithPix[]> {
           ...charge,
           invoiceUrl: parseInvoiceUrl(charge.invoiceUrl),
         };
-      });
+      })
+      .filter((charge) =>
+        paymentEvents.find((paymentEvent) => paymentEvent.id === charge.id),
+      );
 
     logger.info(
       `Found ${pendingCharges.length} pending charges and ${charges.length - pendingCharges.length} paid charges`,
