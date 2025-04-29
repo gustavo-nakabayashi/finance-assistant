@@ -636,68 +636,62 @@ export async function fetchConta49DocumentPaymentCode(
             {
               type: "text",
               text: `
-                You are tasked with extracting specific information from a PDF document containing a Brazillian Boleto. Your goal is to extract the Pix payment code, the expiration date, and the payment value from the provided PDF content.
+You are tasked with extracting specific information from a PDF document containing a Brazillian Boleto. Your goal is to extract the Pix payment code, the expiration date, and the payment value from the provided PDF content.
 
-                Follow these steps to complete the task:
+Follow these steps to complete the task:
 
-                1. Analyze the PDF content and locate the Code to pay, it's a brazillian Boleto for paying taxes.
-                2. Extract the Pix payment code from the QR code. This code is always exactly 48 digits long. Examples of valid formats:
-                   - Without separators: 85890000005068210385250979071625072116722993141
-                   - With spaces: 85890000005 0 68210385250 9 79071625072 1 16722993141 0
-                   - With hyphens: 81670000001-0 75610521202-8 50331032515-7 53710070000-5
+1. Analyze the PDF content and locate the Code to pay, it's a brazillian Boleto for paying taxes.
+2. Extract the Pix payment code from the QR code. This code is always exactly 48 digits long. Examples of valid formats:
+   - Without separators: 85890000005068210385250979071625072116722993141
+   - With spaces: 85890000005 0 68210385250 9 79071625072 1 16722993141 0
+   - With hyphens: 81670000001-075610521202-850331032515-753710070000-5
 
-                3. Process the payment code:
-                   - Remove all white spaces and hyphens
-                   - Validate that the result is exactly 48 digits long
-                   - Ensure no digits are lost during processing, especially after hyphens
+3. Process the payment code:
+   - Remove all white spaces and hyphens
+   - Validate that the result is exactly 48 digits long
+   - Ensure no digits are lost during processing, especially after hyphens
 
-                4. Locate and extract the expiration date for the payment.
-                5. Find and extract the payment value.
-                6. Format the payment value as a string with 2 decimal places.
+4. Locate and extract the expiration date for the payment.
+5. Find and extract the payment value.
+6. Format the payment value as a string with 2 decimal places.
 
-                After extracting the required information, format your response as a JSON object with the following properties:
-                - payment_code: The Pix payment code as a string of exactly 48 digits
-                - value: The payment value as a string with 2 decimal places
-                - expiration_date: The payment date in ISO format
+After extracting the required information, format your response as a JSON object with the following properties:
+- payment_code: The Pix payment code as a string of exactly 48 digits
+- value: The payment value as a string with 2 decimal places
+- expiration_date: The payment date in ISO format
 
-                Answer with only a valid JSON object. Example:
+Answer with only a valid JSON object. Example:
 
-                {
-                  "payment_code": "858900000050682103852509790716250721167229931410",
-                  "value": "123.45",
-                  "expiration_date": "2024-03-15"
-                }
+{
+  "payment_code": "858900000050682103852509790716250721167229931410",
+  "value": "123.45",
+  "expiration_date": "2024-03-15"
+}
 
-                Note: If you cannot find or extract any of the required information, use an empty string ("") for the corresponding value in the JSON object.
+Note: If you cannot find or extract any of the required information, use an empty string ("") for the corresponding value in the JSON object.
 
-                Validation checks:
-                1. The payment_code must be exactly 48 digits long
-                2. Verify that no digits are lost when removing hyphens
-                3. The final string should contain only numbers, no spaces or special characters
-                            },
-                          ],
-                        },
-                      ],
-                    });
+Validation checks:
+1. The payment_code must be exactly 48 digits long
+2. Verify that no digits are lost when removing hyphens
+3. The final string should contain only numbers, no spaces or special characters
+`,
+            },
+          ],
+        },
+      ],
+    });
 
-                    const res = paymentCodeResponse.content[0];
+    const res = paymentCodeResponse.content[0];
 
-                    if (res?.type !== "text") {
-                      logger.error("Failed to fetch document URL from 49");
-                      throw new Error("failed to get text from claude response");
-                    }
+    if (res?.type !== "text") {
+      logger.error("Failed to fetch document URL from 49");
+      throw new Error("failed to get text from claude response");
+    }
 
-  `
-              },
-            ],
-          },
-        ],
-      });
-
-      logger.info(
-        `Attempting to parse payment details response as JSON: ${documentUrl}`,
-        res.text,
-      );
+    logger.info(
+      `Attempting to parse payment details response as JSON: ${documentUrl}`,
+      res.text,
+    );
 
     const paymentCode = boletoSchema.parse(JSON.parse(res.text));
 

@@ -31,7 +31,7 @@ export const documents = createTable(
     paid: boolean("paid").default(false).notNull(),
     payment_code: varchar("payment_code", { length: 1024 }).notNull(),
     value: varchar("value", { length: 1024 }).notNull(),
-    date: varchar("date", { length: 1024 }).notNull(),
+    expiration_date: varchar("date", { length: 1024 }).notNull(),
     created_at: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),

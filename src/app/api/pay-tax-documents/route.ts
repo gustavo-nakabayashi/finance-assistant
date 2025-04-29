@@ -2,19 +2,26 @@ import { db } from "~/server/db";
 import { logger } from "~/utils/logger";
 import { ne, eq, and } from "drizzle-orm";
 import { documents } from "../../../server/db/schema";
-import { makePixPayment } from "~/services/bancoInter";
+import {
+  createBoletoBankAccountPayment,
+  generateBancoInterToken,
+} from "~/services/bancoInter";
 
 export async function GET(request: Request) {
   try {
-    const results = await db.query.documents.findMany({
+    const boletos = await db.query.documents.findMany({
       where: and(eq(documents.paid, false), ne(documents.payment_code, "")),
     });
 
-    makep
+    const token = await generateBancoInterToken();
 
-    makePixPayment()
+    const payBoletos = boletos.map(async (boleto) => {
+      await createBoletoBankAccountPayment(boleto, token.access_token);
+    });
 
-    return new Response(JSON.stringify(results), {
+    await Promise.all(payBoletos);
+
+    return new Response(JSON.stringify(boletos), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
