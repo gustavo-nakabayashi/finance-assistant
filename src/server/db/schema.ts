@@ -3,11 +3,11 @@
 
 import { sql } from "drizzle-orm";
 import {
-  index,
   pgTableCreator,
   timestamp,
   varchar,
   boolean,
+  pgTable,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -30,6 +30,17 @@ export const documentsTable = createTable("documents", {
   payment_code: varchar("payment_code", { length: 1024 }).notNull(),
   value: varchar("value", { length: 1024 }).notNull(),
   expiration_date: varchar("date", { length: 1024 }).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+});
+
+export const paymentEventsTable = pgTable("payment_events", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  description: varchar("description", { length: 1024 }),
   created_at: timestamp("created_at", { withTimezone: true })
     .default(sql`CURRENT_TIMESTAMP`)
     .notNull(),

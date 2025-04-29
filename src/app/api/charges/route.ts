@@ -1,5 +1,6 @@
+import { db } from "~/server/db";
+import { paymentEventsTable } from "~/server/db/schema";
 import {
-  createPixBankAccountPayment,
   createPixCopyPastePayment,
   generateBancoInterToken,
   makePixPayment,
@@ -56,6 +57,11 @@ export async function GET(request: Request) {
           );
 
           await makePixPayment(pixPayment, interToken.access_token);
+
+          await db.insert(paymentEventsTable).values({
+            id: charge.id,
+            description: charge.description,
+          })
 
           logger.info(`Tax paid successfully: ${charge.id}`);
         } else {
