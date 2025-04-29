@@ -2,20 +2,16 @@ import axios from "axios";
 import fs from "fs";
 import https from "https";
 import { logger } from "../utils/logger";
+import { db } from "~/server/db";
+import { type documents } from "~/server/db/schema";
 
-// Base URL for Banco Inter API
 const BANCO_INTER_BASE_URL = "https://cdpj.partners.bancointer.com.br";
-
-// Token endpoint
 const TOKEN_ENDPOINT = "/oauth/v2/token";
-
-// PIX payment endpoint
 const PIX_ENDPOINT = "/banking/v2/pix";
+const BOLETO_ENDPOINT = "/banking/v2/pagamento";
 
-// Types for PIX payment destinations
 type PixDestinationType = "CHAVE" | "DADOS_BANCARIOS" | "PIX_COPIA_E_COLA";
 
-// Interface for token response
 interface TokenResponse {
   access_token: string;
   token_type: string;
@@ -23,7 +19,6 @@ interface TokenResponse {
   expires_in: number;
 }
 
-// Interface for PIX payment response
 interface PixPaymentResponse {
   tipoRetorno: string;
   codigoSolicitacao: string;
@@ -31,7 +26,6 @@ interface PixPaymentResponse {
   dataOperacao: string;
 }
 
-// Interface for PIX payment with key
 interface PixKeyPayment {
   valor: number;
   dataPagamento?: string;
@@ -42,7 +36,6 @@ interface PixKeyPayment {
   };
 }
 
-// Interface for PIX payment with bank account details
 interface PixBankAccountPayment {
   valor: number;
   dataPagamento?: string;
@@ -60,7 +53,6 @@ interface PixBankAccountPayment {
   };
 }
 
-// Interface for PIX payment with copy and paste code
 interface PixCopyPastePayment {
   valor: number;
   dataPagamento?: string;
@@ -74,6 +66,25 @@ interface PixCopyPastePayment {
 // Union type for all PIX payment types
 type PixPayment = PixKeyPayment | PixBankAccountPayment | PixCopyPastePayment;
 
+const openCertificates = () => {
+  if (!process.env.BANCO_INTER_CERT) {
+    throw new Error("BANCO_INTER_CERT environment variable is not set");
+  }
+
+  if (!process.env.BANCO_INTER_KEY) {
+    throw new Error("BANCO_INTER_KEY environment variable is not set");
+  }
+
+  const cert = Buffer.from(process.env.BANCO_INTER_CERT, "base64").toString(
+    "ascii",
+  );
+  const key = Buffer.from(process.env.BANCO_INTER_KEY, "base64").toString(
+    "ascii",
+  );
+
+  return { cert, key };
+};
+
 /**
  * Generate a token for Banco Inter API using certificate-based authentication
  * @returns Promise with the token response
@@ -85,32 +96,20 @@ export async function generateBancoInterToken(): Promise<TokenResponse> {
     // Check if credentials are available
     if (
       !process.env.BANCO_INTER_CLIENT_ID ||
-      !process.env.BANCO_INTER_CLIENT_SECRET ||
-      !process.env.BANCO_INTER_CERT_PATH ||
-      !process.env.BANCO_INTER_KEY_PATH
+      !process.env.BANCO_INTER_CLIENT_SECRET
     ) {
       throw new Error(
-        "Banco Inter credentials or certificate paths not set in environment variables",
+        "Banco Inter credentials or certificate not set in environment variables",
       );
     }
 
-    // Read certificate and key files
-    const certPath = process.env.BANCO_INTER_CERT_PATH;
-    const keyPath = process.env.BANCO_INTER_KEY_PATH;
-
-    // Check if certificate files exist
-    if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
-      throw new Error("Certificate or key file not found");
-    }
-
-    const cert = fs.readFileSync(certPath);
-    const key = fs.readFileSync(keyPath);
+    const { cert, key } = openCertificates();
 
     const params = new URLSearchParams();
     params.append("client_id", process.env.BANCO_INTER_CLIENT_ID);
     params.append("client_secret", process.env.BANCO_INTER_CLIENT_SECRET);
     params.append("grant_type", "client_credentials");
-    params.append("scope", "pagamento-pix.write");
+    params.append("scope", "pagamento-pix.write pagamento-boleto.write");
 
     // Create HTTPS agent with certificates
     const httpsAgent = new https.Agent({
@@ -151,25 +150,7 @@ export async function makePixPayment(
   try {
     logger.info("Making PIX payment");
 
-    // Check if certificate paths are available
-    if (
-      !process.env.BANCO_INTER_CERT_PATH ||
-      !process.env.BANCO_INTER_KEY_PATH
-    ) {
-      throw new Error("Certificate paths not set in environment variables");
-    }
-
-    // Read certificate and key files
-    const certPath = process.env.BANCO_INTER_CERT_PATH;
-    const keyPath = process.env.BANCO_INTER_KEY_PATH;
-
-    // Check if certificate files exist
-    if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
-      throw new Error("Certificate or key file not found");
-    }
-
-    const cert = fs.readFileSync(certPath);
-    const key = fs.readFileSync(keyPath);
+    const { cert, key } = openCertificates();
 
     // If dataPagamento is not provided, use today's date
     if (!("dataPagamento" in payment) || !payment.dataPagamento) {
@@ -296,3 +277,37 @@ export function createPixBankAccountPayment(
   };
 }
 
+type Boleto = typeof documents.$inferInsert;
+
+export async function createBoletoBankAccountPayment(
+  boleto: Boleto,
+  token: string,
+) {
+  logger.info("Making Boleto payment");
+
+  const { cert, key } = openCertificates();
+
+  const httpsAgent = new https.Agent({
+    cert,
+    key,
+    rejectUnauthorized: true, // Validate server certificate
+  });
+
+  const body = {
+    codBarraLinhaDigitavel: boleto.payment_code,
+    valorPagar: boleto.value,
+    dataVencimento: boleto.expiration_date,
+  };
+
+  logger.info(`Trying to pay boleto: `, JSON.stringify(body));
+
+  await axios.post<object>(`${BANCO_INTER_BASE_URL}${BOLETO_ENDPOINT}`, body, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    httpsAgent,
+  });
+
+  logger.info(`Boleto payment successful. Reference: ${boleto.id}`);
+}

@@ -1,3 +1,9 @@
+import {
+  createPixBankAccountPayment,
+  createPixCopyPastePayment,
+  generateBancoInterToken,
+  makePixPayment,
+} from "~/services/bancoInter";
 import { getPendingCharges } from "~/services/conta49";
 import { logger } from "~/utils/logger";
 
@@ -37,6 +43,28 @@ export async function GET(request: Request) {
     });
 
     logger.info("Pending charges fetch test completed successfully");
+
+    const interToken = await generateBancoInterToken();
+
+    for (const charge of pendingCharges) {
+      try {
+        if (charge.pixCode) {
+          const pixPayment = createPixCopyPastePayment(
+            charge.value,
+            charge.pixCode,
+            charge.description,
+          );
+
+          await makePixPayment(pixPayment, interToken.access_token);
+
+          logger.info(`Tax paid successfully: ${charge.id}`);
+        } else {
+          logger.warn(`No PIX code available for tax: ${charge.id}`);
+        }
+      } catch (error) {
+        logger.error(`Error paying tax ${charge.id}`, error);
+      }
+    }
 
     return new Response(
       JSON.stringify({
