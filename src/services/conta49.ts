@@ -451,7 +451,7 @@ export async function getPendingCharges(): Promise<ChargeWithPix[]> {
         };
       })
       .filter((charge) =>
-        paymentEvents.find((paymentEvent) => paymentEvent.id === charge.id),
+        !paymentEvents.find((paymentEvent) => paymentEvent.id === charge.id),
       );
 
     logger.info(
