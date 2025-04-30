@@ -646,7 +646,7 @@ export async function fetchConta49DocumentPaymentCode(
 
                 1. payment_code — o código numérico de pagamento próximo do texto "autenticação mecânica".
                 2. expiration_date — a data de vencimento no formato DD/MM/AAAA.
-                3. value — o valor a pagar no formato numérico com ponto como separador decimal (ex: 568.21).
+                3. value — o valor a pagar no formato string numérico com ponto como separador decimal (ex: "568.21").
 
                 **Formato estritamente esperado:**
 
