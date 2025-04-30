@@ -642,20 +642,18 @@ export async function fetchConta49DocumentPaymentCode(
             {
               type: "text",
               text: `
-                Extraia as seguintes informações de um boleto bancário ou fatura, respondendo **exclusivamente em JSON** para facilitar o parse programático:
+                Extraia as seguintes informações de um boleto bancário ou fatura, respondendo **exclusivamente em JSON puro (sem Markdown, sem blocos de código, sem aspas antes ou depois, sem texto explicativo)** para facilitar o parse programático:
 
-                1. payment_code — o código numérico de pagamento próximo do texto  "autenticação mecânica"
+                1. payment_code — o código numérico de pagamento próximo do texto "autenticação mecânica".
                 2. expiration_date — a data de vencimento no formato DD/MM/AAAA.
                 3. value — o valor a pagar no formato numérico com ponto como separador decimal (ex: 568.21).
 
-                Exemplo de resposta esperada:
-                {
-                  "payment_code": "85840000005 1 68210385251 7 07071625104 4 48193728367 5",
-                  "expiration_date": "17/04/2025",
-                  "value": "568.21"
-                }
+                **Formato estritamente esperado:**
 
-                Apenas retorne o JSON, sem nenhuma explicação ou texto adicional.
+                { "payment_code": "85840000005 1 68210385251 7 07071625104 4 48193728367 5", "expiration_date": "17/04/2025", "value": "568.21" }
+
+
+                **Importante:** Retorne apenas o JSON, sem qualquer formatação adicional.
               `,
             },
           ],
