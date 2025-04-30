@@ -48,7 +48,7 @@ export async function GET(request: Request) {
 
     for (const doc of newDocuments) {
       const docUrl = await fetchConta49DocumentPaymentCode(doc.id);
-      doc.payment_code = docUrl.payment_code;
+      doc.payment_code = docUrl.payment_code.replace(/ /g, "");
       doc.value = docUrl.value;
       doc.expiration_date = docUrl.expiration_date;
       await db.insert(documentsTable).values({

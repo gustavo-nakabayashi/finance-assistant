@@ -535,7 +535,7 @@ export async function getTaxDocuments(): Promise<Conta49TaxDocument[]> {
     const taxDocuments = validatedDocuments.filter(
       (doc: Conta49TaxDocument) => {
         if (!doc.tags || !Array.isArray(doc.tags)) return false;
-        return doc.tags.includes("guia") || doc.tags.includes("Boleto");
+        return doc.tags.includes("guia");
       },
     );
 
@@ -642,45 +642,21 @@ export async function fetchConta49DocumentPaymentCode(
             {
               type: "text",
               text: `
-You are tasked with extracting specific information from a PDF document containing a Brazillian Boleto. Your goal is to extract the Pix payment code, the expiration date, and the payment value from the provided PDF content.
+                Extraia as seguintes informações de um boleto bancário ou fatura, respondendo **exclusivamente em JSON** para facilitar o parse programático:
 
-Follow these steps to complete the task:
+                1. payment_code — o código numérico de pagamento próximo do texto  "autenticação mecânica"
+                2. expiration_date — a data de vencimento no formato DD/MM/AAAA.
+                3. value — o valor a pagar no formato numérico com ponto como separador decimal (ex: 568.21).
 
-1. Analyze the PDF content and locate the Code to pay, it's a brazillian Boleto for paying taxes.
-2. Extract the Pix payment code from the QR code. This code is always exactly 48 digits long. Examples of valid formats:
-   - Without separators: 85890000005068210385250979071625072116722993141
-   - With spaces: 85890000005 0 68210385250 9 79071625072 1 16722993141 0
-   - With hyphens: 81670000001-075610521202-850331032515-753710070000-5
+                Exemplo de resposta esperada:
+                {
+                  "payment_code": "85840000005 1 68210385251 7 07071625104 4 48193728367 5",
+                  "expiration_date": "17/04/2025",
+                  "value": "568.21"
+                }
 
-3. Process the payment code:
-   - Remove all white spaces and hyphens
-   - Validate that the result is exactly 48 digits long
-   - Ensure no digits are lost during processing, especially after hyphens
-
-4. Locate and extract the expiration date for the payment.
-5. Find and extract the payment value.
-6. Format the payment value as a string with 2 decimal places.
-
-After extracting the required information, format your response as a JSON object with the following properties:
-- payment_code: The Pix payment code as a string of exactly 48 digits
-- value: The payment value as a string with 2 decimal places
-- expiration_date: The payment date in ISO format
-
-Answer with only a valid JSON object. Example:
-
-{
-  "payment_code": "858900000050682103852509790716250721167229931410",
-  "value": "123.45",
-  "expiration_date": "2024-03-15"
-}
-
-Note: If you cannot find or extract any of the required information, use an empty string ("") for the corresponding value in the JSON object.
-
-Validation checks:
-1. The payment_code must be exactly 48 digits long
-2. Verify that no digits are lost when removing hyphens
-3. The final string should contain only numbers, no spaces or special characters
-`,
+                Apenas retorne o JSON, sem nenhuma explicação ou texto adicional.
+              `,
             },
           ],
         },
